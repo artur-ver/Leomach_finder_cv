@@ -20,8 +20,8 @@ load_dotenv()
 bot = telebot.TeleBot(os.getenv('TOKEN'))
 
 #here is my phone number
-users_lst = {1375997606: {'phone_number': '+380965645879', 'cv_to_find': ['human'], 'correct_params': True}}
-
+users_lst = {}
+#1375997606: {'phone_number': '+380965645879', 'cv_to_find': ['human'], 'correct_params': True}
 main_keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
 button_under = types.KeyboardButton(text='Parameters 😊')
 button_under2 = types.KeyboardButton(text='Find person 💖')
@@ -36,8 +36,12 @@ def start(message):
 
 @bot.message_handler(commands=['show_my_params'])
 def show_params_command(message):
-    bot.send_message(message.chat.id, f'Phone number: {users_lst[message.chat.id]['phone_number']}\n'
-                                                f'Name person in CV: {','.join(users_lst[message.chat.id]['cv_to_find'])}')
+    try:
+        bot.send_message(message.chat.id, f'Phone number: {users_lst[message.chat.id]['phone_number']}\n'
+                                                    f'Name person in CV: {','.join(users_lst[message.chat.id]['cv_to_find'])}')
+    except KeyError:
+        bot.send_message(message.chat.id, 'You have no params, you can append it \n'
+                                          '/change_phone_number\n/add_cv_to_find')
 
 
 @bot.message_handler(commands=['change_phone_number'])
@@ -219,15 +223,27 @@ def text(message):
         bot.send_message(message.chat.id, 'What do you want to change?', reply_markup=kb)
 
     elif message.text == 'Find person 💖':
-        if message.chat.id in users_lst and users_lst[message.chat.id]['cv_to_find']:
-            bot.send_message(message.chat.id, f'We will start finding your person: {','.join(users_lst[message.chat.id]['cv_to_find'])}')
-            main(message)
+        if message.chat.id in users_lst:
+            if users_lst[message.chat.id]['phone_number'] and users_lst[message.chat.id]['cv_to_find']:
+                bot.send_message(message.chat.id, f'We will start finding your person: {','.join(users_lst[message.chat.id]['cv_to_find'])}')
+                main(message)
+            else:
+                if not users_lst[message.chat.id]['cv_to_find']:
+                    bot.send_message(message.chat.id, 'You have no CV to find\n/add_cv_to_find')
+
+                if not users_lst[message.chat.id]['phone_number']:
+                    bot.send_message(message.chat.id, 'You have no phone number\n/change_phone_number')
         else:
-            bot.send_message(message.chat.id, 'You have no CV to find')
+            bot.send_message(message.chat.id, 'You have no params, you can append it \n'
+                                                  '/change_phone_number\n/add_cv_to_find')
 
     elif message.text == 'Show my params 📋':
-        bot.send_message(message.chat.id, f'Phone number: {users_lst[message.chat.id]['phone_number']}\n'
-                                            f'Name person in CV: {','.join(users_lst[message.chat.id]['cv_to_find'])}')
+        try:
+            bot.send_message(message.chat.id, f'Phone number: {users_lst[message.chat.id]['phone_number']}\n'
+                                                    f'Name person in CV: {','.join(users_lst[message.chat.id]['cv_to_find'])}')
+        except KeyError:
+            bot.send_message(message.chat.id, 'You have no params, you can append it \n'
+                                                  '/change_phone_number\n/add_cv_to_find')
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -254,18 +270,27 @@ def callback_query(call):
             kb.add(personal_button)
         bot.send_message(call.message.chat.id, 'Choose the CV to delete', reply_markup=kb)
 
-    for cv in users_lst[call.message.chat.id]['cv_to_find']:
-        if call.data == f'delete_cv{cv}':
-            users_lst[call.message.chat.id]['cv_to_find'].remove(cv)
-            bot.send_message(call.message.chat.id, f'CV "{cv}" was deleted')
+    try:
+        for cv in users_lst[call.message.chat.id]['cv_to_find']:
+            if call.data == f'delete_cv{cv}':
+                users_lst[call.message.chat.id]['cv_to_find'].remove(cv)
+                bot.send_message(call.message.chat.id, f'CV "{cv}" was deleted')
+    except Exception:
+        cv_append_variable = bot.send_message(call.message.chat.id, 'Send the name of the CV you want to find')
+        bot.register_next_step_handler(cv_append_variable, cv_append)
 
 
 def cv_append(message):
+    if message.chat.id not in users_lst:
+        users_lst[message.chat.id] = {'phone_number': '', 'cv_to_find': [], 'correct_params': False}
+
     users_lst[message.chat.id]['cv_to_find'].append(message.text)
     bot.send_message(message.chat.id, f'We appended the user "{message.text}" in the list of users you want to find')
 
 
 def phone_append(message):
+    if message.chat.id not in users_lst:
+        users_lst[message.chat.id] = {'phone_number': '', 'cv_to_find': [], 'correct_params': False}
     try:
         if int(message.text):
             if '+' in message.text:
