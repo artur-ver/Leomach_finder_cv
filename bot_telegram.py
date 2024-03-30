@@ -19,9 +19,13 @@ load_dotenv()
 
 bot = telebot.TeleBot(os.getenv('TOKEN'))
 
-#here is my phone number
-users_lst = {}
-#1375997606: {'phone_number': '+380965645879', 'cv_to_find': ['human'], 'correct_params': True}
+# here is my phone number
+users_lst = {1375997606: {'phone_number': '+380965645879', 'cv_to_find': ['a'], 'correct_params': True, 'correct_cv': False}}
+# 1375997606: {'phone_number': '+380965645879',
+# 'cv_to_find': ['human'],
+# 'correct_params': True,
+# 'correct_cv':False}
+
 main_keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
 button_under = types.KeyboardButton(text='Parameters 😊')
 button_under2 = types.KeyboardButton(text='Find person 💖')
@@ -98,22 +102,17 @@ def main(message):
         next_button = driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/button[1]/div')
         next_button.click()
 
-        if driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/div[2]/label'):
+        if (driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/div[2]/label').text ==
+                'Invalid phone number.'):
             bot.send_message(message.chat.id, f'Your phone number is incorrect '
                                                 f'({users_lst[message.chat.id]['phone_number']})'
                                                 f' please print correct phone number', reply_markup=main_keyboard)
             users_lst[message.chat.id]['correct_params'] = False
 
-        if users_lst[message.chat.id]['correct_params']:
-            kb = types.ReplyKeyboardMarkup(row_width=2)
-            button1 = types.KeyboardButton(text='Code was not sent')
-            kb.add(button1)
-            code = bot.send_message(message.chat.id, '🔑 Print your code which was sent to Telegram 🔑\n\n'
-                                                        'AND APPEND IN THE END 1 RANDOM NUMBER\n\n'
-                                                        'Example: 777776 (6 was appended), 111112 (2 was appended)\n\n'
-                                                        'If the code was not sent, click this button /send_code_again',
-                                    reply_markup=kb)
+        elif 'Too many attempts' in driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/div[2]/label').text:
+            bot.send_message(message.chat.id, "Too many attempts, now you can't register in Telegram")
 
+        if users_lst[message.chat.id]['correct_params']:
             try:
                 WebDriverWait(driver, 10).until(
                     EC.visibility_of_element_located(('xpath', '//*[@id="auth-qr-form"]/div/button[1]')))
@@ -121,16 +120,22 @@ def main(message):
                     login_by_phone_number.click()
                     time.sleep(3)
                     next_button.click()
+
             except Exception:
                 pass
 
+            code = bot.send_message(message.chat.id, '🔑 Print your code which was sent to Telegram 🔑\n\n'
+                                                     'AND APPEND IN THE END 1 RANDOM NUMBER\n\n'
+                                                     'Example: 777776 (6 was appended), 111112 (2 was appended)\n\n'
+                                                     'If the code was not sent, click this button /send_code_again')
             bot.register_next_step_handler(code, lambda msg: cont(driver, msg.text, message))
+
     except Exception:
         pass
 
 
 def cont(driver, code, message):
-    if len(message.text) == 6:
+    if len(code) >= 6:
         code_field = driver.find_element('xpath', '//*[@id="sign-in-code"]')
         code_field.send_keys(code[0:5])
         '''1'''
@@ -155,7 +160,7 @@ def cont(driver, code, message):
 
 
 def inside_chat(message, driver):
-    flag_to_stop = False
+    users_lst[message.chat.id]['correct_cv'] = False
     WebDriverWait(driver, 20).until(
         EC.visibility_of_element_located(('xpath', '//*[@id="editable-message-text"]')))
     send_message = driver.find_element('xpath', '//*[@id="editable-message-text"]')
@@ -171,7 +176,7 @@ def inside_chat(message, driver):
     time.sleep(3)
     send_message.send_keys('5\n')
 
-    while not flag_to_stop:
+    while not users_lst[message.chat.id]['correct_cv']:
         time.sleep(3)
         cv = driver.find_element('css selector', '.last-in-list')
         if cv:
@@ -180,11 +185,13 @@ def inside_chat(message, driver):
                                                                                                                    ' ')
                 for nickname in users_lst[message.chat.id]['cv_to_find']:
                     if nickname.lower() in cv_text:
-                        flag_to_stop = True
-                        decide = input('continue: yes/no')
-                        if decide == 'yes':
-                            send_message.send_keys('3\n')
-                            flag_to_stop = False
+                        users_lst[message.chat.id]['correct_cv'] = True
+                        kb = types.InlineKeyboardMarkup(row_width=1)
+                        correct_cv = types.InlineKeyboardButton('This is the CV I need😍', callback_data='correct_cv')
+                        incorrect_cv = types.InlineKeyboardButton("Continue searching🌹", callback_data='incorrect_cv')
+                        kb.add(correct_cv, incorrect_cv)
+                        bot.send_message(message.chat.id, 'We found cv!!!, check your "https://t.me/leomatchbot",'
+                                                          ' and choose option dawn', reply_markup=kb)
                         break
 
                     elif 'нет такого варианта ответа' in cv_text:
@@ -209,7 +216,11 @@ def inside_chat(message, driver):
 
 @bot.message_handler(commands=['send_code_again'])
 def send_code_again(message):
-    main(message)
+    if message.chat.id in users_lst:
+        bot.send_message(message.chat.id, 'Please wait, the code will come now 👽')
+        main(message)
+    else:
+        bot.send_message(message.chat.id, 'You have no params to do it(')
 
 
 @bot.message_handler(content_types=['text'])
@@ -269,6 +280,14 @@ def callback_query(call):
             personal_button = types.InlineKeyboardButton(f'{cv}', callback_data=f'delete_cv{cv}')
             kb.add(personal_button)
         bot.send_message(call.message.chat.id, 'Choose the CV to delete', reply_markup=kb)
+
+    elif call.data == 'correct_cv':
+        users_lst[call.message.chat.id]['correct_cv'] = True
+        bot.send_message(call.message.chat.id, 'Glad I could help)')
+
+    elif call.data == 'incorrect_cv':
+        users_lst[call.message.chat.id]['correct_cv'] = False
+        bot.send_message(call.message.chat.id, 'I continue my search')
 
     try:
         for cv in users_lst[call.message.chat.id]['cv_to_find']:
