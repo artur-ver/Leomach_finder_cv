@@ -20,17 +20,20 @@ load_dotenv()
 bot = telebot.TeleBot(os.getenv('TOKEN'))
 
 # here is my phone number
-users_lst = {1375997606: {'phone_number': '+380965645879', 'cv_to_find': ['a'], 'correct_params': True, 'correct_cv': False}}
+users_lst = {1375997606: {'phone_number': '+380965645879', 'cv_to_find': ['name'], 'correct_params': True, 'correct_cv': False, 'stop_program': False}}
 # 1375997606: {'phone_number': '+380965645879',
 # 'cv_to_find': ['human'],
 # 'correct_params': True,
 # 'correct_cv':False}
+admin_id = os.getenv('ADMIN_ID')
+
 
 main_keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
 button_under = types.KeyboardButton(text='Parameters 😊')
 button_under2 = types.KeyboardButton(text='Find person 💖')
 button_under3 = types.KeyboardButton(text='Show my params 📋')
-main_keyboard.add(button_under, button_under2, button_under3)
+button_under4 = types.KeyboardButton(text='Contact us ✔')
+main_keyboard.add(button_under, button_under2, button_under3, button_under4)
 
 
 @bot.message_handler(commands=['start'])
@@ -48,10 +51,22 @@ def show_params_command(message):
                                           '/change_phone_number\n/add_cv_to_find')
 
 
+@bot.message_handler(commands=['stop_program'])
+def stop_program(message):
+    users_lst[message.chat.id]['stop_program'] = True
+    bot.send_message(message.chat.id, 'Program was stopped （＾∀＾●）ﾉｼ')
+
+
 @bot.message_handler(commands=['change_phone_number'])
 def change_phone_number_command(message):
     phone_append_variable = bot.send_message(message.chat.id, 'Send your new phone number')
     bot.register_next_step_handler(phone_append_variable, phone_append)
+
+
+@bot.message_handler(commands=['contact_us'])
+def solving_user_problem_command(message):
+    problem = bot.send_message(message.chat.id, 'Tell more about your problem, and we will decide it')
+    bot.register_next_step_handler(problem, solving_user_problem)
 
 
 @bot.message_handler(commands=['add_cv_to_find'])
@@ -60,9 +75,35 @@ def change_phone_number_command(message):
     bot.register_next_step_handler(cv_append_variable, cv_append)
 
 
+@bot.message_handler(commands=['send_code_again'])
+def send_code_again(message):
+    if message.chat.id in users_lst:
+        bot.send_message(message.chat.id, 'Please wait, the code will come now 👽')
+        main(message)
+    else:
+        bot.send_message(message.chat.id, 'You have no params to do it(')
+
+
+@bot.message_handler(commands=['find_person'])
+def find_person_command(message):
+    if message.chat.id in users_lst:
+        if users_lst[message.chat.id]['phone_number'] and users_lst[message.chat.id]['cv_to_find']:
+            bot.send_message(message.chat.id,
+                             f'We will start finding your person: {','.join(users_lst[message.chat.id]['cv_to_find'])}\nNow will be sanded code on your Telegram, please wait and after that complete instructions')
+            main(message)
+        else:
+            if not users_lst[message.chat.id]['cv_to_find']:
+                bot.send_message(message.chat.id, 'You have no CV to find\n/add_cv_to_find')
+
+            if not users_lst[message.chat.id]['phone_number']:
+                bot.send_message(message.chat.id, 'You have no phone number\n/change_phone_number')
+
+
 def main(message):
     try:
+        users_lst[message.chat.id]['stop_program'] = False
         users_lst[message.chat.id]['correct_params'] = True
+
         options = webdriver.ChromeOptions()
         options.add_argument('--incognito')
         # options.add_argument('--headless')
@@ -86,49 +127,51 @@ def main(message):
 
         driver.get('https://web.telegram.org/a/')
 
-        WebDriverWait(driver, 20).until(
-            EC.visibility_of_element_located(('xpath', '//*[@id="auth-qr-form"]/div/button[1]')))
-        time.sleep(3)
-        login_by_phone_number = driver.find_element('xpath', '//*[@id="auth-qr-form"]/div/button[1]')
-        login_by_phone_number.click()
+        if not users_lst[message.chat.id]['stop_program']:
+            WebDriverWait(driver, 20).until(
+                EC.visibility_of_element_located(('xpath', '//*[@id="auth-qr-form"]/div/button[1]')))
+            time.sleep(3)
+            login_by_phone_number = driver.find_element('xpath', '//*[@id="auth-qr-form"]/div/button[1]')
+            login_by_phone_number.click()
 
-        WebDriverWait(driver, 20).until(
-            EC.visibility_of_element_located(('xpath', '//*[@id="sign-in-phone-number"]')))
-        phone_number = driver.find_element('xpath', '//*[@id="sign-in-phone-number"]')
-        time.sleep(1)
-        phone_number.clear()
-        phone_number.send_keys(users_lst[message.chat.id]['phone_number'])
+            WebDriverWait(driver, 20).until(
+                EC.visibility_of_element_located(('xpath', '//*[@id="sign-in-phone-number"]')))
+            phone_number = driver.find_element('xpath', '//*[@id="sign-in-phone-number"]')
+            time.sleep(1)
+            phone_number.clear()
+            phone_number.send_keys(users_lst[message.chat.id]['phone_number'])
 
-        next_button = driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/button[1]/div')
-        next_button.click()
+            next_button = driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/button[1]/div')
+            next_button.click()
 
-        if (driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/div[2]/label').text ==
-                'Invalid phone number.'):
-            bot.send_message(message.chat.id, f'Your phone number is incorrect '
-                                                f'({users_lst[message.chat.id]['phone_number']})'
-                                                f' please print correct phone number', reply_markup=main_keyboard)
-            users_lst[message.chat.id]['correct_params'] = False
+            if (driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/div[2]/label').text ==
+                    'Invalid phone number.'):
+                bot.send_message(message.chat.id, f'Your phone number is incorrect '
+                                                    f'({users_lst[message.chat.id]['phone_number']})'
+                                                    f' please print correct phone number', reply_markup=main_keyboard)
+                users_lst[message.chat.id]['correct_params'] = False
 
-        elif 'Too many attempts' in driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/div[2]/label').text:
-            bot.send_message(message.chat.id, "Too many attempts, now you can't register in Telegram")
+            elif 'Too many attempts' in driver.find_element('xpath', '//*[@id="auth-phone-number-form"]/div/form/div[2]/label').text:
+                bot.send_message(message.chat.id, "Too many attempts, now you can't register in Telegram")
 
-        if users_lst[message.chat.id]['correct_params']:
-            try:
-                WebDriverWait(driver, 10).until(
-                    EC.visibility_of_element_located(('xpath', '//*[@id="auth-qr-form"]/div/button[1]')))
-                if login_by_phone_number:
+            if users_lst[message.chat.id]['correct_params']:
+                try:
+                    WebDriverWait(driver, 5).until(
+                        EC.visibility_of_element_located(('xpath', '//*[@id="auth-qr-form"]/div/button[1]')))
                     login_by_phone_number.click()
                     time.sleep(3)
                     next_button.click()
 
-            except Exception:
-                pass
+                except Exception:
+                    pass
 
-            code = bot.send_message(message.chat.id, '🔑 Print your code which was sent to Telegram 🔑\n\n'
-                                                     'AND APPEND IN THE END 1 RANDOM NUMBER\n\n'
-                                                     'Example: 777776 (6 was appended), 111112 (2 was appended)\n\n'
-                                                     'If the code was not sent, click this button /send_code_again')
-            bot.register_next_step_handler(code, lambda msg: cont(driver, msg.text, message))
+                code = bot.send_message(message.chat.id, '🔑 Print your code which was sent to Telegram 🔑\n\n'
+                                                         'AND APPEND IN THE END 1 RANDOM NUMBER\n\n'
+                                                         'Example: 777776 (6 was appended), 111112 (2 was appended)\n\n'
+                                                         'If the code was not sent, click this button /send_code_again')
+                bot.register_next_step_handler(code, lambda msg: cont(driver, msg.text, message))
+        else:
+            driver.close()
 
     except Exception:
         pass
@@ -136,23 +179,30 @@ def main(message):
 
 def cont(driver, code, message):
     if len(code) >= 6:
-        code_field = driver.find_element('xpath', '//*[@id="sign-in-code"]')
-        code_field.send_keys(code[0:5])
-        '''1'''
-        WebDriverWait(driver, 20).until(
-            EC.visibility_of_element_located(('xpath', '//*[@id="telegram-search-input"]')))
+        try:
+            code_field = driver.find_element('xpath', '//*[@id="sign-in-code"]')
+            code_field.send_keys(code[0:5])
 
-        search_channel = driver.find_element('xpath', '//*[@id="telegram-search-input"]')
-        search_channel.send_keys('@leomatchbot')
+            WebDriverWait(driver, 20).until(
+                EC.visibility_of_element_located(('xpath', '//*[@id="telegram-search-input"]')))
 
-        WebDriverWait(driver, 20).until(
-            EC.visibility_of_element_located(('css selector', '.ChatInfo')))
+            search_channel = driver.find_element('xpath', '//*[@id="telegram-search-input"]')
+            search_channel.send_keys('@leomatchbot')
 
-        channel_button = driver.find_element('css selector', '.ChatInfo')
-        channel_button.click()
+            WebDriverWait(driver, 20).until(
+                EC.visibility_of_element_located(('css selector', '.ChatInfo')))
 
-        inside_chat(message, driver)
-        time.sleep(120)
+            channel_button = driver.find_element('css selector', '.ChatInfo')
+            channel_button.click()
+
+            bot.send_message(message.chat.id, f'You can check leomach, now bot find your CV: {users_lst[message.chat.id]['cv_to_find']}\nIf you want to stop program you can click here /stop_program')
+
+            inside_chat(message, driver)
+
+        except Exception:
+            bot.send_message(message.chat.id, 'Something went wrong, please try again /send_code_again')
+            driver.close()
+
     else:
         bot.send_message(message.chat.id, "<b>You didn't append some symbol at the end of your message</b>\n"
                                           "You can try again by pressing the 'Find person' button", reply_markup=main_keyboard, parse_mode='html')
@@ -160,67 +210,71 @@ def cont(driver, code, message):
 
 
 def inside_chat(message, driver):
-    users_lst[message.chat.id]['correct_cv'] = False
-    WebDriverWait(driver, 20).until(
-        EC.visibility_of_element_located(('xpath', '//*[@id="editable-message-text"]')))
-    send_message = driver.find_element('xpath', '//*[@id="editable-message-text"]')
-    send_message.send_keys('/language\n')
-    time.sleep(3)
-    option_button = driver.find_element('css selector', '.icon.icon-bot-command')
-    option_button.click()
-    time.sleep(3)
-    language_button = driver.find_element('css selector', '.Button.default.primary.has-ripple')
-    language_button.click()
-    time.sleep(3)
-    send_message.send_keys('/myprofile\n')
-    time.sleep(3)
-    send_message.send_keys('5\n')
-
-    while not users_lst[message.chat.id]['correct_cv']:
+    try:
+        users_lst[message.chat.id]['correct_cv'] = False
+        WebDriverWait(driver, 20).until(
+            EC.visibility_of_element_located(('xpath', '//*[@id="editable-message-text"]')))
+        send_message = driver.find_element('xpath', '//*[@id="editable-message-text"]')
+        send_message.send_keys('/language\n')
         time.sleep(3)
-        cv = driver.find_element('css selector', '.last-in-list')
-        if cv:
-            try:
-                cv_text = cv.find_element('css selector', '.text-content.clearfix.with-meta').text.lower().replace('\n',
-                                                                                                                   ' ')
-                for nickname in users_lst[message.chat.id]['cv_to_find']:
-                    if nickname.lower() in cv_text:
-                        users_lst[message.chat.id]['correct_cv'] = True
-                        kb = types.InlineKeyboardMarkup(row_width=1)
-                        correct_cv = types.InlineKeyboardButton('This is the CV I need😍', callback_data='correct_cv')
-                        incorrect_cv = types.InlineKeyboardButton("Continue searching🌹", callback_data='incorrect_cv')
-                        kb.add(correct_cv, incorrect_cv)
-                        bot.send_message(message.chat.id, 'We found cv!!!, check your "https://t.me/leomatchbot",'
-                                                          ' and choose option dawn', reply_markup=kb)
-                        break
+        option_button = driver.find_element('css selector', '.icon.icon-bot-command')
+        option_button.click()
+        time.sleep(3)
+        language_button = driver.find_element('css selector', '.Button.default.primary.has-ripple')
+        language_button.click()
+        time.sleep(3)
+        send_message.send_keys('/myprofile\n')
+        time.sleep(3)
+        send_message.send_keys('5\n')
 
-                    elif 'нет такого варианта ответа' in cv_text:
-                        send_message.send_keys('Отмена\n')
-                        time.sleep(5)
-                        send_message.send_keys('1\n')
-                        break
+        while not users_lst[message.chat.id]['correct_cv']:
+            time.sleep(3)
+            cv = driver.find_element('css selector', '.last-in-list')
+            if cv:
+                if not users_lst[message.chat.id]['stop_program']:
+                    try:
+                        cv_text = cv.find_element('css selector', '.text-content.clearfix.with-meta').text.lower().replace('\n',
+                                                                                                                           ' ')
+                        for nickname in users_lst[message.chat.id]['cv_to_find']:
+                            if nickname.lower() in cv_text:
+                                users_lst[message.chat.id]['correct_cv'] = True
+                                kb = types.InlineKeyboardMarkup(row_width=1)
+                                correct_cv = types.InlineKeyboardButton('This is the CV I need😍', callback_data='correct_cv')
+                                incorrect_cv = types.InlineKeyboardButton("Continue searching🌹", callback_data='incorrect_cv')
+                                kb.add(correct_cv, incorrect_cv)
+                                bot.send_message(message.chat.id, 'We found cv!!!, check your "https://t.me/leomatchbot",'
+                                                                  ' and choose option dawn', reply_markup=kb)
+                                break
 
-                    elif 'прикрепи к сообщению фото или видео до 15 секунд' in cv_text:
-                        send_message.send_keys('Вернуться назад\n')
-                        time.sleep(5)
-                        send_message.send_keys('1\n')
-                        break
+                            elif 'ты понравился' in cv_text or 'кому-то понравилась твоя анкета' in cv_text:
+                                bot.send_message(message.chat.id, 'Please check your leomach, '
+                                                                  'somebody liked your profile')
+                                driver.close()
 
-                    else:
+                            elif 'нет такого варианта ответа' in cv_text:
+                                send_message.send_keys('Отмена\n')
+                                time.sleep(5)
+                                send_message.send_keys('1\n')
+                                break
+
+                            elif 'прикрепи к сообщению фото или видео до 15 секунд' in cv_text:
+                                send_message.send_keys('Вернуться назад\n')
+                                time.sleep(5)
+                                send_message.send_keys('1\n')
+                                break
+
+                            else:
+                                send_message.send_keys('3\n')
+                                break
+
+                    except Exception:
                         send_message.send_keys('3\n')
-                        break
 
-            except Exception:
-                send_message.send_keys('3\n')
+                else:
+                    driver.close()
 
-
-@bot.message_handler(commands=['send_code_again'])
-def send_code_again(message):
-    if message.chat.id in users_lst:
-        bot.send_message(message.chat.id, 'Please wait, the code will come now 👽')
-        main(message)
-    else:
-        bot.send_message(message.chat.id, 'You have no params to do it(')
+    except Exception:
+        pass
 
 
 @bot.message_handler(content_types=['text'])
@@ -236,7 +290,7 @@ def text(message):
     elif message.text == 'Find person 💖':
         if message.chat.id in users_lst:
             if users_lst[message.chat.id]['phone_number'] and users_lst[message.chat.id]['cv_to_find']:
-                bot.send_message(message.chat.id, f'We will start finding your person: {','.join(users_lst[message.chat.id]['cv_to_find'])}')
+                bot.send_message(message.chat.id, f'We will start finding your person: {','.join(users_lst[message.chat.id]['cv_to_find'])}\nNow will be sanded code on your Telegram, please wait and after that complete instructions')
                 main(message)
             else:
                 if not users_lst[message.chat.id]['cv_to_find']:
@@ -247,6 +301,9 @@ def text(message):
         else:
             bot.send_message(message.chat.id, 'You have no params, you can append it \n'
                                                   '/change_phone_number\n/add_cv_to_find')
+    elif message.text == 'Contact us ✔':
+        problem = bot.send_message(message.chat.id, 'Tell more about your problem, and we will decide it')
+        bot.register_next_step_handler(problem, solving_user_problem)
 
     elif message.text == 'Show my params 📋':
         try:
@@ -287,7 +344,7 @@ def callback_query(call):
 
     elif call.data == 'incorrect_cv':
         users_lst[call.message.chat.id]['correct_cv'] = False
-        bot.send_message(call.message.chat.id, 'I continue my search')
+        bot.send_message(call.message.chat.id, 'Please print 👎 in https://t.me/leomatchbot and click here:/find_person')
 
     try:
         for cv in users_lst[call.message.chat.id]['cv_to_find']:
@@ -305,6 +362,15 @@ def cv_append(message):
 
     users_lst[message.chat.id]['cv_to_find'].append(message.text)
     bot.send_message(message.chat.id, f'We appended the user "{message.text}" in the list of users you want to find')
+
+
+def solving_user_problem(message):
+    bot.send_message(admin_id, f'Text: {message.text}'
+                               f'\nFirst name: {message.from_user.first_name}'
+                               f'\nSecond name: {message.from_user.last_name}'
+                               f'\nUsername: {message.from_user.username}')
+    bot.send_message(message.chat.id, 'Your problem was sanded to our admins, they will decide it in nearly time,'
+                                      ' thanks for your feedback!🖤')
 
 
 def phone_append(message):
